@@ -125,6 +125,15 @@ def main() -> None:
             expect(frame.locator('#formula')).to_have_attribute('data-tex', 'f(x)=-0.5x^{11}')
             assert frame.evaluate('MuWeaveModuleBridge.getTypography().fontSizePt') == 13
             assert frame.evaluate('getComputedStyle(document.body).fontSize') == '17.3333px'
+            page.evaluate('state=>fixture.mount({state,activity:"power",launchParameters:{type:"linear"}})', saved)
+            frame = app_frame(page)
+            expect(frame.locator('[value="linear"]')).to_be_checked()
+            frame.locator('[value="power"]').check()
+            expect(frame.locator('#slider-n')).to_have_value('11')
+            expect(frame.locator('#slider-a')).to_have_value('-0.5')
+            page.evaluate('state=>fixture.mount({state,activity:"power",launchParameters:{type:"invalid"}})', saved)
+            frame = app_frame(page)
+            expect(frame.locator('[value="power"]')).to_be_checked()
             for family in ['linear', 'quadratic', 'power']:
                 page.evaluate('activity=>fixture.mount({activity})', family)
                 frame = app_frame(page)

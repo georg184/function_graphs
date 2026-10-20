@@ -56,7 +56,7 @@ addEventListener('message', event => {
   if(message.kind==='ready') fixture.send('init', {
     state:saved, typography:options.typography??{fontSizePt:10,lineHeight:1.35,scaleFactor:1.25},
     module:{id:'function_graphs',version:fixtureData.version,stateVersion:1,instance:'test',
-      activity:options.activity??'power',presentation:options.presentation??'compact'}
+      activity:options.activity??'power',presentation:options.presentation??'compact',launchParameters:options.launchParameters??{}}
   });
   if(message.kind==='state-changed'||message.kind==='snapshot') saved=message.payload.state;
 });
@@ -67,7 +67,7 @@ fixture.mount();
     source.write_text(
         'µblock.interactive("function_graphs", instance="graphs-inline", activity="power", presentation="compact")\n\n'
         'µblock.interactive("function_graphs", instance="graphs-tab", activity="linear", presentation="full", open="tab")\n\n'
-        'µblock.applet[url="https://georg184.github.io/function_graphs/?type=quadratic", title="Funktionen entdecken"]{\n'
+        'µblock.applet[url="https://georg184.github.io/items/440/?type=quadratic", title="Funktionen entdecken"]{\n'
         'µblock.interactive("function_graphs", instance="graphs-applet", activity="quadratic", presentation="full")\n'
         ',,\nWähle den Funktionstyp und verändere die Parameter.\n}\n', encoding="utf-8")
     subprocess.run([sys.executable, "-m", "pyhtml", str(source), "--output", str(directory / "smoke.html"),

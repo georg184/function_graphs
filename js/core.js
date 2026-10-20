@@ -1,7 +1,7 @@
 /* Pure function models, bounded parameter state and plot geometry. */
 (function (global) {
   'use strict';
-  const VERSION = '20261020.201612';
+  const VERSION = '20261020.205140';
   const TYPES = Object.freeze(['linear', 'quadratic', 'power']);
   const SETTINGS = Object.freeze({
     linear: Object.freeze({m: {min: -5, max: 5, step: 0.1, initial: 1}, q: {min: -10, max: 10, step: 0.1, initial: 0}}),

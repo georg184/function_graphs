@@ -33,15 +33,17 @@ explizite Vorauswahl hat Vorrang vor dem gespeicherten Funktionstyp. Die
 gespeicherten Parameter jeder Familie bleiben erhalten. Der Link-Button
 kopiert die Vorauswahl, nicht die aktuellen Parameterwerte.
 
-Öffentliche Anwendung: [Funktionen entdecken](https://georg184.github.io/function_graphs/).
-[Potenzfunktionen vorauswählen](https://georg184.github.io/function_graphs/?type=power).
+Öffentliche Anwendung: [Funktionen entdecken](https://georg184.github.io/items/440/).
+[Potenzfunktionen vorauswählen](https://georg184.github.io/items/440/?type=power).
 
 ## MuWeave
 
 Die Modul-ID ist `function_graphs`, die Standardaktivität `power`. Die weiteren
 Aktivitäten `linear` und `quadratic` stellen lediglich den anfänglichen
 Funktionstyp ein; jede Aktivität erlaubt weiterhin den Wechsel zwischen allen
-drei Familien. Bei vorhandener kompatibler Host-Speicherung gilt deren Stand.
+drei Familien. Eine explizite Vorauswahl der öffentlichen Itemseite wird nach
+der kompatiblen Host-Speicherung angewandt; die Parameterwerte bleiben dabei
+erhalten. Ohne URL-Vorauswahl gilt der gespeicherte Stand.
 
 ```text
 µblock.interactive("function_graphs", instance="funktionen-entdecken", activity="power")
@@ -124,7 +126,20 @@ Branch `main`. GitHub Pages verwendet den Actions-Workflow
 Kerntests und veröffentlicht ausschliesslich `index.html`, `.nojekyll`,
 `css/` und `js/`.
 
-Ein freigegebener `git push origin main` startet die Veröffentlichung.
+Die öffentliche Lernadresse ist `https://georg184.github.io/items/440/`.
+Das eigenständige Quellprojekt bleibt separat; auch seine Link-Buttons zeigen
+auf die Itemadresse. Die zusätzliche Projektseite unter `/function_graphs/`
+verwendet dieselbe Implementierung.
+
+Nach App-Änderungen das geprüfte MuWeb-Artefakt installieren und den Wrapper
+`../items/440.muweave` mit `../items/scripts/export.py 440` neu exportieren.
+Die selbstständige Itemseite entsteht ausschliesslich durch diesen regulären
+PyHTML-Export. Der [Item-Veröffentlichungsablauf](../items/DEVELOPMENT.md)
+beschreibt Prüfung und Lieferung des separaten Repositories. Die zugehörigen
+MuWeave-Dokumente ebenfalls neu bauen.
+
+Ein freigegebener `git push origin main` in diesem Quellprojekt aktualisiert
+die zusätzliche Projektseite.
 Den Workflow bis zum Abschluss verfolgen und anschliessend den öffentlichen
 Versionsstand, die ausgelieferten Dateien sowie alle drei `?type=...`-Links
 in einem frischen Browserprofil prüfen.

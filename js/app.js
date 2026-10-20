@@ -1,8 +1,8 @@
 /* Accessible explorer UI, SVG graph and MuWeb learner-state integration. */
 (function () {
   'use strict';
-  const APP_VERSION = '20261020.201612';
-  const PUBLIC_URL = 'https://georg184.github.io/function_graphs/';
+  const APP_VERSION = '20261020.205140';
+  const PUBLIC_URL = 'https://georg184.github.io/items/440/';
   const core = window.FunctionGraphsCore;
   const bridge = window.MuWeaveModuleBridge || null;
   const storageKey = 'function-graphs-state-v1';
@@ -90,10 +90,9 @@
     if (state.type === 'power') {
       if (p.a === 0) {
         special = true;
-        content = 'Bei \\(a=0\\) entsteht die Nullfunktion. Sie ist nach unserer Definition keine Potenzfunktion mit eindeutigem Grad.';
+        content = 'Bei \\(a=0\\) entsteht die Nullfunktion. Sie ist nach unserer Definition keine Potenzfunktion.';
       } else {
         content = p.n % 2 === 0 ? 'Gerader Grad: Der Graph ist achsensymmetrisch zur \\(y\\)-Achse.' : 'Ungerader Grad: Der Graph ist punktsymmetrisch zum Ursprung.';
-        content += ' Für Potenzfunktionen gilt \\(a\\ne 0\\).';
       }
     } else if (state.type === 'quadratic') {
       if (p.a === 0) {
@@ -244,16 +243,16 @@
     }
   });
 
-  /** Apply a saved state, then an explicit standalone URL or fresh host activity. */
+  /** Apply a saved state, then an explicit URL preset or fresh host activity. */
   async function initialize(restored) {
     if (ready || locked) return;
     try {
       const activity = bridge?.getModuleContext()?.activity;
       state = restored == null ? core.createState(activity) : core.validateState(restored);
-      if (!bridge) {
-        const requested = new URL(location.href).searchParams.get('type');
-        if (core.TYPES.includes(requested)) state.type = requested;
-      }
+      const requested = bridge
+        ? bridge.getModuleContext()?.launchParameters?.type
+        : new URL(location.href).searchParams.get('type');
+      if (core.TYPES.includes(requested)) state.type = requested;
     } catch {
       fail('Der gespeicherte Stand ist ungültig. Er wurde nicht überschrieben.');
       return;

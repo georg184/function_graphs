@@ -2,9 +2,9 @@
   "format": "muweave-interactive-module",
   "format_version": 3,
   "id": "function_graphs",
-  "version": "20261020.201612",
+  "version": "20261020.205140",
   "entry": "embed.html",
-  "canonical_url": "https://georg184.github.io/function_graphs/?type=power",
+  "canonical_url": "https://georg184.github.io/items/440/?type=power",
   "title": {"de": "Funktionen entdecken – Potenzfunktionen"},
   "offline": true,
   "state_version": 1,
@@ -22,13 +22,13 @@
   "default_activity": "power",
   "activities": {
     "linear": {
-      "canonical_url": "https://georg184.github.io/function_graphs/?type=linear",
+      "canonical_url": "https://georg184.github.io/items/440/?type=linear",
       "title": {"de": "Funktionen entdecken – lineare Funktionen"},
       "preferred_height": "17cm",
       "ai": {"kind": "function-explorer", "learning_objectives": ["Explore how m and q affect the graph of f(x)=m*x+q and compare it with quadratic and power functions"]}
     },
     "quadratic": {
-      "canonical_url": "https://georg184.github.io/function_graphs/?type=quadratic",
+      "canonical_url": "https://georg184.github.io/items/440/?type=quadratic",
       "title": {"de": "Funktionen entdecken – quadratische Funktionen"},
       "preferred_height": "17cm",
       "ai": {"kind": "function-explorer", "learning_objectives": ["Explore how a, b and c affect the graph of f(x)=a*x^2+b*x+c and compare it with linear and power functions"]}
