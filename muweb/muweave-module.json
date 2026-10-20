@@ -1,0 +1,38 @@
+{
+  "format": "muweave-interactive-module",
+  "format_version": 3,
+  "id": "function_graphs",
+  "version": "20261020.201612",
+  "entry": "embed.html",
+  "canonical_url": "https://georg184.github.io/function_graphs/?type=power",
+  "title": {"de": "Funktionen entdecken – Potenzfunktionen"},
+  "offline": true,
+  "state_version": 1,
+  "preferred_height": "17cm",
+  "permissions": [],
+  "ai": {
+    "kind": "function-explorer",
+    "learning_objectives": [
+      "Explore f(x)=m*x+q, f(x)=a*x^2+b*x+c and f(x)=a*x^n with sliders on equally scaled coordinate axes",
+      "Distinguish the roles of slope, intercept, polynomial coefficients and positive integer degree",
+      "Investigate even and odd power-function symmetry and the effect of a nonzero coefficient",
+      "Recognize that a=0 removes the quadratic term or gives the zero function, excluded from the stated power-function definition"
+    ]
+  },
+  "default_activity": "power",
+  "activities": {
+    "linear": {
+      "canonical_url": "https://georg184.github.io/function_graphs/?type=linear",
+      "title": {"de": "Funktionen entdecken – lineare Funktionen"},
+      "preferred_height": "17cm",
+      "ai": {"kind": "function-explorer", "learning_objectives": ["Explore how m and q affect the graph of f(x)=m*x+q and compare it with quadratic and power functions"]}
+    },
+    "quadratic": {
+      "canonical_url": "https://georg184.github.io/function_graphs/?type=quadratic",
+      "title": {"de": "Funktionen entdecken – quadratische Funktionen"},
+      "preferred_height": "17cm",
+      "ai": {"kind": "function-explorer", "learning_objectives": ["Explore how a, b and c affect the graph of f(x)=a*x^2+b*x+c and compare it with linear and power functions"]}
+    }
+  },
+  "runtime_requirements": {"math": "muweave-mathjax-4-svg-v1"}
+}

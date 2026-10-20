@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="de-CH">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Lineare Funktionen, quadratische Funktionen und Potenzfunktionen mit Reglern erkunden.">
+  <title>Funktionen entdecken</title>
+  <script>window.GG_APP_VERSION = '20261020.201612';</script>
+  <link rel="stylesheet" href="css/styles.css?v=20261020.201612">
+  <script src="js/mathjax-config.js?v=20261020.201612"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@mathjax/mathjax-modern-font@4.1.3/tex-mml-svg-mathjax-modern.js"></script>
+  <script defer src="js/core.js?v=20261020.201612"></script>
+  <script defer src="js/vendor/muweave-typography.js?v=20261020.201612"></script>
+  <script defer src="js/app.js?v=20261020.201612"></script>
+</head>
+<body>
+  <div class="page">
+    <header class="page-header" data-full-only>
+      <div><p class="eyebrow">Mathematik · Funktionen</p><h1>Funktionen entdecken</h1></div>
+      <p>Verändere die Parameter.<br>Beobachte, wie sich der Graph verändert.</p>
+    </header>
+    <p id="notice" class="notice" role="alert">Das Applet wird geladen …</p>
+    <main id="app" class="explorer" aria-label="Funktionsgraphen mit Parametern">
+      <aside class="controls" aria-label="Funktionstyp und Parameter">
+        <fieldset id="function-types" class="type-list">
+          <legend>Funktionstyp</legend>
+          <label class="type-option"><input type="radio" name="function-type" value="linear"><span><strong>Lineare Funktionen</strong><span class="type-formula">\(f(x)=mx+q\)</span></span></label>
+          <label class="type-option"><input type="radio" name="function-type" value="quadratic"><span><strong>Quadratische Funktionen</strong><span class="type-formula">\(f(x)=ax^2+bx+c\)</span></span></label>
+          <label class="type-option"><input type="radio" name="function-type" value="power" checked><span><strong>Potenzfunktionen vom Grad \(n\in\mathbb{N}\)</strong><span class="type-formula">\(f(x)=ax^n\)</span></span></label>
+        </fieldset>
+        <div class="parameter-heading"><h2>Parameter</h2><button id="reset-parameters" class="text-button" type="button">Zurücksetzen</button></div>
+        <div id="parameters"></div>
+      </aside>
+      <section class="graph-panel" aria-labelledby="graph-heading">
+        <header class="graph-header"><div><h2 id="graph-heading">Potenzfunktion</h2><div id="formula" class="current-formula" aria-live="off"></div></div><span class="curve-key"><span></span>Graph von \(f\)</span></header>
+        <div class="plot-container"><svg id="plot" role="img" aria-label="Koordinatensystem mit Funktionsgraph"><title>Funktionsgraph</title></svg></div>
+        <div class="graph-toolbar">
+          <div class="zoom-controls" role="group" aria-label="Diagrammausschnitt"><button id="zoom-out" type="button" aria-label="Diagramm verkleinern" title="Verkleinern">−</button><button id="zoom-in" type="button" aria-label="Diagramm vergrössern" title="Vergrössern">+</button><button id="reset-view" type="button">Standardansicht</button></div>
+          <div id="coordinates" class="coordinates">Einheiten auf beiden Achsen gleich gross.</div>
+        </div>
+        <p id="insight" class="insight"></p>
+      </section>
+    </main>
+    <footer class="page-footer"><span>Eine Auswahl, ein Graph. Alle Parameter wirken sofort.</span><button id="copy-link" type="button" class="text-button">Link zu diesem Funktionstyp kopieren</button></footer>
+    <label id="link-fallback" class="link-fallback" hidden>Link zu diesem Funktionstyp<input id="share-url" type="text" readonly></label>
+    <p id="status" class="sr-only" role="status"></p>
+  </div>
+  <noscript>Dieses Applet benötigt JavaScript.</noscript>
+</body>
+</html>
