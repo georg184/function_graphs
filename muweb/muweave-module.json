@@ -2,12 +2,12 @@
   "format": "muweave-interactive-module",
   "format_version": 3,
   "id": "function_graphs",
-  "version": "20261020.205140",
+  "version": "20261026.183552",
   "entry": "embed.html",
   "canonical_url": "https://georg184.github.io/items/440/?type=power",
   "title": {"de": "Funktionen entdecken – Potenzfunktionen"},
   "offline": true,
-  "state_version": 1,
+  "state_version": 2,
   "preferred_height": "17cm",
   "permissions": [],
   "ai": {
@@ -16,6 +16,7 @@
       "Explore f(x)=m*x+q, f(x)=a*x^2+b*x+c and f(x)=a*x^n with sliders on equally scaled coordinate axes",
       "Distinguish the roles of slope, intercept, polynomial coefficients and positive integer degree",
       "Investigate even and odd power-function symmetry and the effect of a nonzero coefficient",
+      "Compare f(x)=a*x^n and g(x)=a*x^m with one shared coefficient and independent positive integer degrees",
       "Recognize that a=0 removes the quadratic term or gives the zero function, excluded from the stated power-function definition"
     ]
   },

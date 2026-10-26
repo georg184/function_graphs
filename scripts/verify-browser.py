@@ -35,7 +35,7 @@ def app_frame(page: Page) -> Frame:
     Args:
         page: Parent browser page containing one visible application frame.
     """
-    page.wait_for_function('Array.from(document.querySelectorAll("iframe")).some(frame=>frame.src.startsWith("blob:"))')
+    page.wait_for_function('() => Array.from(document.querySelectorAll("iframe")).some(frame=>frame.src.startsWith("blob:"))')
     for _ in range(100):
         sources = page.locator('iframe:visible').evaluate_all('(frames)=>frames.map(frame=>frame.src)')
         for frame in page.frames[1:]:
@@ -44,6 +44,49 @@ def app_frame(page: Page) -> Frame:
                 return frame
         page.wait_for_timeout(100)
     raise AssertionError('No application frame')
+
+
+def comparison(surface: Page | Frame) -> None:
+    """Verify two distinct graphs, a shared coefficient and degenerate cases.
+
+    Args:
+        surface: Ready power-function page or embedded frame.
+    """
+    # Keyboard input also exercises frames scaled by the host's document zoom;
+    # Playwright's pointer coordinates omit that ancestor zoom in Chromium.
+    if not surface.locator('#comparison-toggle').is_checked():
+        surface.locator('#comparison-toggle').press('Space')
+    slider(surface, 'n', 4)
+    slider(surface, 'm', 2)
+    slider(surface, 'a', -2)
+    expect(surface.locator('#formula')).to_have_attribute('data-tex', 'f(x)=-2x^{4}')
+    expect(surface.locator('#comparison-formula')).to_have_attribute('data-tex', 'g(x)=-2x^{2}')
+    expect(surface.locator('#comparison-curve')).to_have_attribute('stroke-dasharray', '8 5')
+    assert surface.locator('#function-curve').get_attribute('d') != surface.locator('#comparison-curve').get_attribute('d')
+    slider(surface, 'a', 0.5)
+    expect(surface.locator('#formula')).to_have_attribute('data-tex', 'f(x)=0.5x^{4}')
+    expect(surface.locator('#comparison-formula')).to_have_attribute('data-tex', 'g(x)=0.5x^{2}')
+    slider(surface, 'm', 4)
+    expect(surface.locator('#comparison-formula')).to_have_attribute('data-tex', 'g(x)=0.5x^{4}')
+    expect(surface.locator('#comparison-curve')).to_have_attribute('d', surface.locator('#function-curve').get_attribute('d'))
+    slider(surface, 'a', 0)
+    expect(surface.locator('#formula')).to_have_attribute('data-tex', 'f(x)=0')
+    expect(surface.locator('#comparison-formula')).to_have_attribute('data-tex', 'g(x)=0')
+    expect(surface.locator('#insight')).to_contain_text('keine Potenzfunktion.')
+    slider(surface, 'a', -2)
+    slider(surface, 'm', 2)
+    surface.locator('[value="linear"]').press('Space')
+    expect(surface.locator('#power-comparison')).to_be_hidden()
+    expect(surface.locator('#comparison-formula')).to_be_hidden()
+    expect(surface.locator('#comparison-curve')).to_have_count(0)
+    assert surface.locator('#slider-m').count() == 1
+    surface.locator('[value="power"]').press('Space')
+    expect(surface.locator('#comparison-toggle')).to_be_checked()
+    expect(surface.locator('#slider-m')).to_have_value('2')
+    expect(surface.locator('#comparison-formula')).to_have_attribute('data-tex', 'g(x)=-2x^{2}')
+    surface.locator('#comparison-toggle').press('Space')
+    expect(surface.locator('#slider-m')).to_be_hidden()
+    expect(surface.locator('#comparison-curve')).to_have_count(0)
 
 
 def main() -> None:
@@ -75,7 +118,14 @@ def main() -> None:
             slider(page, 'n', 4)
             expect(page.locator('#formula')).to_have_attribute('data-tex', 'f(x)=-2x^{4}')
             assert original != page.locator('#function-curve').get_attribute('d')
+            comparison(page)
+            page.locator('#comparison-toggle').focus()
+            page.keyboard.press('Space')
+            expect(page.locator('#comparison-curve')).to_have_count(1)
             page.screenshot(path=str(directory / 'desktop-power.png'), full_page=True)
+            page.reload(); ready(page)
+            expect(page.locator('#comparison-toggle')).to_be_checked()
+            expect(page.locator('#comparison-formula')).to_have_attribute('data-tex', 'g(x)=-2x^{2}')
             page.locator('[value="linear"]').check()
             slider(page, 'm', 2)
             slider(page, 'q', -3)
@@ -108,21 +158,35 @@ def main() -> None:
             page.set_viewport_size({'width': 390, 'height': 844})
             page.locator('[value="power"]').check()
             expect(page.locator('#formula')).to_have_attribute('data-tex', 'f(x)=x^{3}')
+            expect(page.locator('#comparison-formula')).to_have_attribute('data-tex', 'g(x)=x^{2}')
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), 'Mobile horizontal overflow'
             page.screenshot(path=str(directory / 'mobile-power.png'), full_page=True)
             page.set_viewport_size({'width': 1500, 'height': 1100})
-            reports.append('standalone: three presets, all controls, parity, zero, keyboard, state, zoom, mobile')
+            legacy = page.evaluate('FunctionGraphsCore.createState()')
+            legacy['schema'] = 1
+            del legacy['comparison']
+            del legacy['parameters']['power']['m']
+            legacy['parameters']['power']['n'] = 7
+            page.evaluate('state=>localStorage.setItem("function-graphs-state-v1",JSON.stringify(state))', legacy)
+            page.reload(); ready(page)
+            expect(page.locator('#slider-n')).to_have_value('7')
+            expect(page.locator('#comparison-toggle')).not_to_be_checked()
+            reports.append('standalone: presets, controls, comparison/shared coefficient, zero/equal degrees, keyboard, state migration, zoom, mobile')
         if args.only in (None, 'host'):
             page.goto((directory / 'host.html').as_uri())
             frame = app_frame(page)
+            comparison(frame)
+            frame.locator('#comparison-toggle').check()
             slider(frame, 'n', 11)
             slider(frame, 'a', -0.5)
-            page.wait_for_function('fixture.state?.parameters.power.n===11 && fixture.state.parameters.power.a===-0.5')
+            page.wait_for_function('() => fixture.state?.parameters.power.n===11 && fixture.state.parameters.power.a===-0.5')
             saved = page.evaluate('fixture.state')
             page.evaluate('state=>fixture.mount({state,activity:"power",presentation:"full",typography:{fontSizePt:13,lineHeight:1.6,scaleFactor:1.3}})', saved)
             frame = app_frame(page)
             expect(frame.locator('#slider-n')).to_have_value('11')
             expect(frame.locator('#formula')).to_have_attribute('data-tex', 'f(x)=-0.5x^{11}')
+            expect(frame.locator('#comparison-toggle')).to_be_checked()
+            expect(frame.locator('#comparison-formula')).to_have_attribute('data-tex', 'g(x)=-0.5x^{2}')
             assert frame.evaluate('MuWeaveModuleBridge.getTypography().fontSizePt') == 13
             assert frame.evaluate('getComputedStyle(document.body).fontSize') == '17.3333px'
             page.evaluate('state=>fixture.mount({state,activity:"power",launchParameters:{type:"linear"}})', saved)
@@ -138,6 +202,16 @@ def main() -> None:
                 page.evaluate('activity=>fixture.mount({activity})', family)
                 frame = app_frame(page)
                 expect(frame.locator('[name="function-type"]:checked')).to_have_value(family)
+            legacy = json.loads(json.dumps(saved))
+            legacy['schema'] = 1
+            del legacy['comparison']
+            del legacy['parameters']['power']['m']
+            page.evaluate('state=>fixture.mount({state,migrate:true})', legacy)
+            frame = app_frame(page)
+            expect(frame.locator('#slider-n')).to_have_value('11')
+            expect(frame.locator('#comparison-toggle')).not_to_be_checked()
+            assert page.evaluate('fixture.state.schema') == 2
+            assert page.evaluate('fixture.messages.some(message=>message.kind==="migration-result" && message.payload.ok)')
             page.evaluate('fixture.send("host-disabled",{reason:"verification"})')
             expect(frame.locator('#slider-a')).to_be_disabled()
             expect(frame.locator('#notice')).to_contain_text('gesperrt')
@@ -146,14 +220,19 @@ def main() -> None:
             frame = next(frame for frame in page.frames[1:] if frame.locator('#app').count())
             expect(frame.locator('#notice')).to_contain_text('ungültig')
             assert page.evaluate('fixture.state.schema') == 99
-            reports.append('host: opaque sandbox, each activity, compact/full, snapshot restore, typography, disabled and invalid state')
+            reports.append('host: opaque sandbox, activities, compact/full, comparison restore, bridge migration, typography, disabled/invalid state')
         if args.only in (None, 'pyhtml'):
             page.goto((directory / 'smoke.html').as_uri())
             frame = app_frame(page)
             expect(frame.locator('[value="power"]')).to_be_checked()
+            comparison(frame)
+            slider(frame, 'a', 1)
             slider(frame, 'n', 6)
             expect(frame.locator('#formula')).to_have_attribute('data-tex', 'f(x)=x^{6}')
-            assert page.locator('#muweave-mathjax').count() == 1
+            # With no document-level mathematics the shared runtime is stored
+            # only in the host profile table and executed inside each sandbox.
+            assert page.locator('#muweave-mathjax').count() <= 1
+            assert frame.locator('#muweave-mathjax').count() == 1
             assert page.locator('#muweave-runtime-profiles').count() == 1
             page.screenshot(path=str(directory / 'pyhtml.png'), full_page=True)
             with context.expect_page() as pending:

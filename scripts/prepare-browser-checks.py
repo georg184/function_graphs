@@ -29,7 +29,8 @@ def main() -> None:
     install_artifact(artifact, directory / "interactive")
     runtime = _mathjax_runtime_markup()
     data = json.dumps({"entry": entry.replace("</head>", runtime + "</head>", 1),
-                       "withoutRuntime": entry, "version": artifact.manifest.version}).replace("</", "<\\/")
+                       "withoutRuntime": entry, "version": artifact.manifest.version,
+                       "stateVersion": artifact.manifest.state_version}).replace("</", "<\\/")
     host = '''<!doctype html><meta charset="utf-8"><title>Function graphs bridge checks</title>
 <style>body{margin:0}iframe{width:100%;height:100vh;border:0}</style>
 <iframe id="module" sandbox="allow-scripts" title="Function graphs"></iframe>
@@ -50,14 +51,23 @@ window.fixture = {
   },
   get state() {return saved;}
 };
+function initialize() {
+  fixture.send('init', {
+    state:saved, typography:options.typography??{fontSizePt:10,lineHeight:1.35,scaleFactor:1.25},
+    module:{id:'function_graphs',version:fixtureData.version,stateVersion:fixtureData.stateVersion,instance:'test',
+      activity:options.activity??'power',presentation:options.presentation??'compact',launchParameters:options.launchParameters??{}}
+  });
+}
 addEventListener('message', event => {
   if(event.source!==frame.contentWindow || event.data?.channel!=='test-channel') return;
   const message=event.data; fixture.messages.push(message);
-  if(message.kind==='ready') fixture.send('init', {
-    state:saved, typography:options.typography??{fontSizePt:10,lineHeight:1.35,scaleFactor:1.25},
-    module:{id:'function_graphs',version:fixtureData.version,stateVersion:1,instance:'test',
-      activity:options.activity??'power',presentation:options.presentation??'compact',launchParameters:options.launchParameters??{}}
-  });
+  if(message.kind==='ready') {
+    if(options.migrate) fixture.send('migrate-state',{requestId:1,fromVersion:1,toVersion:2,state:saved});
+    else initialize();
+  }
+  if(message.kind==='migration-result' && message.payload.ok) {
+    saved=message.payload.state; initialize();
+  }
   if(message.kind==='state-changed'||message.kind==='snapshot') saved=message.payload.state;
 });
 fixture.mount();

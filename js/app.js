@@ -1,7 +1,7 @@
 /* Accessible explorer UI, SVG graph and MuWeb learner-state integration. */
 (function () {
   'use strict';
-  const APP_VERSION = '20261020.205140';
+  const APP_VERSION = '20261026.183552';
   const PUBLIC_URL = 'https://georg184.github.io/items/440/';
   const core = window.FunctionGraphsCore;
   const bridge = window.MuWeaveModuleBridge || null;
@@ -71,14 +71,18 @@
   /** Update the live equation without letting rapid slider events display old values. */
   function renderFormula() {
     const revision = ++formulaRevision;
-    const tex = core.formula(state.type, state.parameters[state.type]);
-    const target = document.getElementById('formula');
+    const expressions = core.curves(state).map(curve => ({
+      tex: core.formula(curve.type, curve.parameters, curve.name),
+      target: document.getElementById(curve.name === 'f' ? 'formula' : 'comparison-formula')
+    }));
     withMath(async () => {
       if (revision !== formulaRevision) return;
-      const expression = await MathJax.tex2svgPromise(tex, {display: false});
+      const rendered = await Promise.all(expressions.map(({tex}) => MathJax.tex2svgPromise(tex, {display: false})));
       if (revision !== formulaRevision) return;
-      target.replaceChildren(expression);
-      target.dataset.tex = tex;
+      expressions.forEach(({tex, target}, index) => {
+        target.replaceChildren(rendered[index]);
+        target.dataset.tex = tex;
+      });
       root.dataset.ready = 'true';
     });
   }
@@ -91,6 +95,8 @@
       if (p.a === 0) {
         special = true;
         content = 'Bei \\(a=0\\) entsteht die Nullfunktion. Sie ist nach unserer Definition keine Potenzfunktion.';
+      } else if (state.comparison) {
+        content = 'Beide Graphen haben denselben Vorfaktor \\(a\\). Die Grade \\(n\\) und \\(m\\) lassen sich unabhängig einstellen.';
       } else {
         content = p.n % 2 === 0 ? 'Gerader Grad: Der Graph ist achsensymmetrisch zur \\(y\\)-Achse.' : 'Ungerader Grad: Der Graph ist punktsymmetrisch zum Ursprung.';
       }
@@ -138,16 +144,21 @@
       if (i) lines.push(line(padding, y(value), width - padding, y(value), i % 2 ? '#eff3f6' : '#dce6eb'));
       if (i && i % 2 === 0) labels.push(`<text x="${x(0) - 9}" y="${y(value) + 5}" text-anchor="end">${core.number(value)}</text>`);
     }
-    const graph = core.graphPath(state.type, state.parameters[state.type], {width, height, span: state.span, padding});
+    const curves = core.curves(state);
+    const graphs = curves.map(curve => {
+      const path = core.graphPath(curve.type, curve.parameters, {width, height, span: state.span, padding});
+      const comparison = curve.name === 'g';
+      return `<path id="${comparison ? 'comparison-curve' : 'function-curve'}" d="${path}" fill="none" stroke="${comparison ? '#b65717' : '#0a7b80'}" ${comparison ? 'stroke-dasharray="8 5"' : ''} stroke-width="3" stroke-linecap="round" stroke-linejoin="round" clip-path="url(#graph-clip)"/>`;
+    }).join('');
     plot.setAttribute('viewBox', `0 0 ${width} ${height}`);
-    plot.setAttribute('aria-label', `${titles[state.type]}. ${Object.entries(state.parameters[state.type]).map(([key, value]) => `${key} = ${core.number(value)}`).join('; ')}.`);
+    plot.setAttribute('aria-label', curves.map(curve => core.formula(curve.type, curve.parameters, curve.name)).join('; '));
     plot.innerHTML = `<title>${titles[state.type]}</title><defs><clipPath id="graph-clip"><rect x="${padding}" y="${padding}" width="${width - 2 * padding}" height="${height - 2 * padding}"/></clipPath><marker id="axis-arrow" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6" fill="none" stroke="#516a7a" stroke-width="1.1"/></marker></defs>
       ${lines.join('')}
       <path d="M${padding - 7} ${y(0)} H${width - padding + 9}" stroke="#516a7a" stroke-width="1.4" fill="none" marker-end="url(#axis-arrow)"/>
       <path d="M${x(0)} ${height - padding + 7} V${padding - 9}" stroke="#516a7a" stroke-width="1.4" fill="none" marker-end="url(#axis-arrow)"/>
       ${labels.join('')}<text x="${x(0) - 9}" y="${y(0) + 23}" text-anchor="end">0</text>
       <text class="axis-label" x="${width - padding + 13}" y="${y(0) - 9}">x</text><text class="axis-label" x="${x(0) + 12}" y="${padding - 10}">y</text>
-      <path id="function-curve" d="${graph}" fill="none" stroke="#0a7b80" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" clip-path="url(#graph-clip)"/>`;
+      ${graphs}`;
     document.getElementById('zoom-in').disabled = locked || state.span <= 2;
     document.getElementById('zoom-out').disabled = locked || state.span >= 80;
   }
@@ -159,6 +170,12 @@
 
   /** Synchronize paired controls without replacing the active slider DOM. */
   function updateParameters() {
+    const comparison = state.type === 'power' && state.comparison;
+    document.getElementById('power-comparison').hidden = state.type !== 'power';
+    document.getElementById('comparison-toggle').checked = state.comparison;
+    for (const id of ['comparison-parameters', 'comparison-formula', 'comparison-key']) {
+      document.getElementById(id).hidden = !comparison;
+    }
     for (const [key, value] of Object.entries(state.parameters[state.type])) {
       document.getElementById(`slider-${key}`).value = String(value);
       document.getElementById(`number-${key}`).value = String(value);
@@ -175,18 +192,31 @@
     document.querySelectorAll('[name="function-type"]').forEach(input => { input.checked = input.value === state.type; });
     document.getElementById('graph-heading').textContent = titles[state.type];
     const parameters = document.getElementById('parameters');
-    MathJax.typesetClear?.([parameters]);
-    parameters.innerHTML = Object.entries(core.SETTINGS[state.type]).map(([key, setting]) => `<div class="parameter">
-      <div class="parameter-top"><label class="parameter-symbol" for="slider-${key}">\\(${key}\\)</label><input class="parameter-number" id="number-${key}" data-parameter="${key}" type="number" lang="en" min="${setting.min}" max="${setting.max}" step="${setting.step}" aria-label="${roles[key]} ${key}, Zahlenwert"></div>
-      <input id="slider-${key}" data-parameter="${key}" type="range" min="${setting.min}" max="${setting.max}" step="${setting.step}" aria-label="${roles[key]} ${key}">
-      <div class="parameter-bounds"><span>${core.number(setting.min)}</span><span>${core.number(setting.max)}</span></div></div>`).join('');
-    withMath(async () => { await MathJax.typesetPromise([parameters]); });
+    const comparisonParameters = document.getElementById('comparison-parameters');
+    MathJax.typesetClear?.([parameters, comparisonParameters]);
+    parameters.replaceChildren();
+    comparisonParameters.replaceChildren();
+    for (const [key, setting] of Object.entries(core.SETTINGS[state.type])) {
+      const comparison = state.type === 'power' && key === 'm';
+      const role = comparison ? 'Grad des Vergleichsgraphen' : roles[key];
+      const target = comparison ? comparisonParameters : parameters;
+      target.insertAdjacentHTML('beforeend', `<div class="parameter">
+        <div class="parameter-top"><label class="parameter-symbol" for="slider-${key}">\\(${key}\\)</label><input class="parameter-number" id="number-${key}" data-parameter="${key}" type="number" lang="en" min="${setting.min}" max="${setting.max}" step="${setting.step}" aria-label="${role} ${key}, Zahlenwert"></div>
+        <input id="slider-${key}" data-parameter="${key}" type="range" min="${setting.min}" max="${setting.max}" step="${setting.step}" aria-label="${role} ${key}">
+        <div class="parameter-bounds"><span>${core.number(setting.min)}</span><span>${core.number(setting.max)}</span></div></div>`);
+    }
+    withMath(async () => { await MathJax.typesetPromise([parameters, comparisonParameters]); });
     updateParameters();
-    if (locked) parameters.querySelectorAll('input').forEach(input => { input.disabled = true; });
+    if (locked) root.querySelectorAll('input').forEach(input => { input.disabled = true; });
   }
 
   root.addEventListener('change', event => {
     if (!ready || locked) return;
+    if (event.target.id === 'comparison-toggle') {
+      state.comparison = event.target.checked;
+      updateParameters();
+      publish();
+    }
     if (event.target.name === 'function-type') {
       state.type = event.target.value;
       renderFamily();
@@ -268,6 +298,7 @@
   }
 
   if (bridge) {
+    bridge.registerStateMigration(1, core.migrateState);
     bridge.setSnapshotProvider(snapshot);
     bridge.subscribeState(initialize);
     if (bridge.isInitialized()) initialize(bridge.getState());

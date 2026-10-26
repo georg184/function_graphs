@@ -1,12 +1,12 @@
 /* Pure function models, bounded parameter state and plot geometry. */
 (function (global) {
   'use strict';
-  const VERSION = '20261020.205140';
+  const VERSION = '20261026.183552';
   const TYPES = Object.freeze(['linear', 'quadratic', 'power']);
   const SETTINGS = Object.freeze({
     linear: Object.freeze({m: {min: -5, max: 5, step: 0.1, initial: 1}, q: {min: -10, max: 10, step: 0.1, initial: 0}}),
     quadratic: Object.freeze({a: {min: -5, max: 5, step: 0.1, initial: 1}, b: {min: -10, max: 10, step: 0.1, initial: 0}, c: {min: -10, max: 10, step: 0.1, initial: 0}}),
-    power: Object.freeze({a: {min: -5, max: 5, step: 0.1, initial: 1}, n: {min: 1, max: 12, step: 1, initial: 3}})
+    power: Object.freeze({a: {min: -5, max: 5, step: 0.1, initial: 1}, n: {min: 1, max: 12, step: 1, initial: 3}, m: {min: 1, max: 12, step: 1, initial: 2}})
   });
   const DISPLAY = new Intl.NumberFormat('en-US', {useGrouping: false, maximumFractionDigits: 3});
 
@@ -17,13 +17,14 @@
 
   /** Return an independent, complete state with the requested initial family. */
   function createState(type = 'power') {
-    return {schema: 1, type: TYPES.includes(type) ? type : 'power', parameters: Object.fromEntries(TYPES.map(kind => [kind,
+    return {schema: 2, comparison: false, type: TYPES.includes(type) ? type : 'power', parameters: Object.fromEntries(TYPES.map(kind => [kind,
       Object.fromEntries(Object.entries(SETTINGS[kind]).map(([key, setting]) => [key, setting.initial]))])), span: 10};
   }
 
   /** Validate every saved family, including controls that are currently hidden. */
   function validateState(value) {
-    if (!value || value.schema !== 1 || !TYPES.includes(value.type) || !value.parameters || !Number.isFinite(value.span) || value.span < 2 || value.span > 80) throw new TypeError('Invalid function graph state');
+    if (value?.schema === 1) return migrateState(value);
+    if (!value || value.schema !== 2 || typeof value.comparison !== 'boolean' || !TYPES.includes(value.type) || !value.parameters || !Number.isFinite(value.span) || value.span < 2 || value.span > 80) throw new TypeError('Invalid function graph state');
     const state = createState(value.type);
     for (const type of TYPES) {
       for (const [key, setting] of Object.entries(SETTINGS[type])) {
@@ -33,7 +34,25 @@
       }
     }
     state.span = value.span;
+    state.comparison = value.comparison;
     return state;
+  }
+
+  /** Upgrade schema one without changing its family, parameters or viewport. */
+  function migrateState(value) {
+    if (value?.schema !== 1) throw new TypeError('Expected function graph state schema one');
+    return validateState({...value, schema: 2, comparison: false,
+      parameters: {...value.parameters, power: {...value.parameters?.power, m: SETTINGS.power.m.initial}}});
+  }
+
+  /** Derive displayed curves from one shared coefficient and independent degrees. */
+  function curves(state) {
+    const parameters = state.parameters[state.type];
+    const result = [{name: 'f', type: state.type, parameters}];
+    if (state.type === 'power' && state.comparison) {
+      result.push({name: 'g', type: 'power', parameters: {a: parameters.a, n: parameters.m}});
+    }
+    return result;
   }
 
   /** Clamp and snap a user control while leaving model and display rounding separate. */
@@ -53,7 +72,7 @@
   }
 
   /** Compose a simplified TeX polynomial; zero terms and unit factors are omitted. */
-  function formula(type, p) {
+  function formula(type, p, name = 'f') {
     const terms = type === 'linear' ? [[p.m, 1], [p.q, 0]] : type === 'quadratic' ? [[p.a, 2], [p.b, 1], [p.c, 0]] : [[p.a, p.n]];
     let body = '';
     for (const [coefficient, exponent] of terms) {
@@ -64,7 +83,7 @@
       const power = exponent === 0 ? '' : exponent === 1 ? 'x' : `x^{${exponent}}`;
       body += sign + factor + power;
     }
-    return `f(x)=${body || '0'}`;
+    return `${name}(x)=${body || '0'}`;
   }
 
   /** Choose readable grid spacing from the usual 1, 2, 5 sequence. */
@@ -101,7 +120,7 @@
     return url.href;
   }
 
-  const api = Object.freeze({VERSION, TYPES, SETTINGS, number, createState, validateState, parameter, evaluate, formula, gridStep, graphPath, familyUrl});
+  const api = Object.freeze({VERSION, TYPES, SETTINGS, number, createState, validateState, migrateState, curves, parameter, evaluate, formula, gridStep, graphPath, familyUrl});
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else global.FunctionGraphsCore = api;
 })(typeof window === 'undefined' ? globalThis : window);

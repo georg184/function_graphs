@@ -7,6 +7,13 @@ den Graphen und seine Funktionsgleichung sofort. Alle Achsen verwenden
 denselben Massstab; Vergrössern, Verkleinern und Standardansicht ändern nur
 den Diagrammausschnitt.
 
+Bei Potenzfunktionen lässt sich ein zweiter Graph `g(x)=a*x^m` zuschalten.
+Beide Graphen teilen den Vorfaktor `a`; die Grade `n` und `m` sind unabhängig
+einstellbar. Der Graph von `f` ist durchgezogen und türkis, der von `g`
+gestrichelt und orange. Die entsprechend gefärbten Gleichungen zeigen die
+aktuellen Funktionen. Beim Wechsel des Funktionstyps bleibt die
+Vergleichseinstellung gespeichert und wird nur bei Potenzfunktionen angezeigt.
+
 Die Oberfläche ist deutsch. Die Parameterwerte lassen sich auch direkt
 eingeben. Die Regler verwenden Schritte von 0.1, der Grad Schritte von 1.
 Der Gradbereich reicht von 1 bis 12. Bei `a=0` erklärt das Applet ausdrücklich
@@ -65,12 +72,17 @@ für das PDF. Im Kapitel wird es mit `µblock.applet(item=440)` eingefügt.
 
 ## Zustand
 
-Schema 1 enthält `schema`, `type`, `parameters` mit sämtlichen Werten aller
-drei Familien sowie `span` für den vertikalen Diagrammausschnitt. Alle
+Schema 2 enthält `schema`, `type`, `parameters` mit sämtlichen Werten aller
+drei Familien sowie `span` für den vertikalen Diagrammausschnitt. `comparison`
+speichert, ob der Vergleichsgraph eingeschaltet ist; `parameters.power.m`
+speichert seinen Grad. Der Vorfaktor wird gemeinsam aus `parameters.power.a`
+gelesen. Die Migration von Schema 1 ergänzt `comparison=false` und `m=2`,
+ohne vorhandene Parameter zu verändern. Sie ist bei der MuWeb-Bridge als
+Migration 1 → 2 registriert und gilt auch für eigenständige Seiten. Alle
 Zahlen werden auf endliche Werte, Grenzen und Schrittweite geprüft.
 Typografie, Fenstergrösse und compact/full gehören nicht zum Lernzustand.
 
-Eigenständige Seiten speichern unter `function-graphs-state-v1` im lokalen
+Eigenständige Seiten behalten den Speicherschlüssel `function-graphs-state-v1` im lokalen
 Browser-Speicher. Eingebettet ist ausschliesslich die MuWeb-Bridge zuständig.
 Ungültige Daten bleiben erhalten und sperren die Bearbeitung mit einer
 sichtbaren Meldung. Eine Host-Speichersperre deaktiviert Änderungen.
@@ -94,7 +106,8 @@ python scripts/verify-browser.py /tmp/function-graphs-check
 Die Vorbereitung erzeugt eine Offline-Seite, einen echten sandboxierten
 Bridge-Host und eine unabhängige PyHTML-Datei mit mehreren Einbindungen.
 Die Browserprüfung sperrt Netzwerkzugriffe und prüft Auswahl, alle Regler,
-Link-Vorauswahl, Zustandswiederherstellung, Typografie, Sonderfälle,
+Link-Vorauswahl, Zustandswiederherstellung und Migration, Vergleichsgraph mit
+gemeinsamem Vorfaktor, Typografie, Sonderfälle,
 Tastaturbedienung, schmale Ansichten und sichtbare Infrastrukturfehler.
 `--only standalone|host|pyhtml|failures` erlaubt gezielte Wiederholungen.
 
