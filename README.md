@@ -5,7 +5,12 @@ Potenzfunktionen mit positivem ganzzahligem Grad. Eine ständig sichtbare
 Radiobutton-Gruppe wählt den Funktionstyp. Die zugehörigen Regler verändern
 den Graphen und seine Funktionsgleichung sofort. Alle Achsen verwenden
 denselben Massstab; Vergrössern, Verkleinern und Standardansicht ändern nur
-den Diagrammausschnitt.
+den Diagrammausschnitt. Über dem Diagramm zoomt das Mausrad zum Mauszeiger:
+Der betrachtete Punkt bleibt an derselben Bildschirmposition. Der vertikale
+Ausschnitt kann bis auf 0.05 Einheiten vergrössert werden, um Schnittpunkte
+genauer zu untersuchen. «Standardansicht» stellt den ursprünglichen Ausschnitt
+um den Ursprung wieder her. Ausserhalb des Diagramms scrollt das Mausrad die
+Seite; Strg/Cmd mit Mausrad bleibt dem Browser vorbehalten.
 
 Bei Potenzfunktionen lässt sich ein zweiter Graph `g(x)=a*x^m` zuschalten.
 Beide Graphen teilen den Vorfaktor `a`; die Grade `n` und `m` sind unabhängig
@@ -72,14 +77,19 @@ für das PDF. Im Kapitel wird es mit `µblock.applet(item=440)` eingefügt.
 
 ## Zustand
 
-Schema 2 enthält `schema`, `type`, `parameters` mit sämtlichen Werten aller
-drei Familien sowie `span` für den vertikalen Diagrammausschnitt. `comparison`
+Schema 3 enthält `schema`, `type`, `parameters` mit sämtlichen Werten aller
+drei Familien sowie `span` für den vertikalen Diagrammausschnitt und
+`center: {x, y}` für dessen Mittelpunkt. `comparison`
 speichert, ob der Vergleichsgraph eingeschaltet ist; `parameters.power.m`
 speichert seinen Grad. Der Vorfaktor wird gemeinsam aus `parameters.power.a`
 gelesen. Die Migration von Schema 1 ergänzt `comparison=false` und `m=2`,
-ohne vorhandene Parameter zu verändern. Sie ist bei der MuWeb-Bridge als
-Migration 1 → 2 registriert und gilt auch für eigenständige Seiten. Alle
-Zahlen werden auf endliche Werte, Grenzen und Schrittweite geprüft.
+ohne vorhandene Parameter zu verändern. Die Migration 2 → 3 ergänzt den
+bisherigen Mittelpunkt `{x: 0, y: 0}`. Beide benachbarten Migrationen sind bei
+der MuWeb-Bridge registriert und gelten auch für eigenständige Seiten.
+Der Ausschnitt bleibt nach dem Neuladen und beim Wiederherstellen einer
+gespeicherten MuWeave-Arbeit erhalten. `span` liegt zwischen 0.05 und 80,
+die Mittelpunktskoordinaten zwischen −10000 und 10000. Alle Zahlen werden auf
+endliche Werte, Grenzen und bei Parametern auf die Schrittweite geprüft.
 Typografie, Fenstergrösse und compact/full gehören nicht zum Lernzustand.
 
 Eigenständige Seiten behalten den Speicherschlüssel `function-graphs-state-v1` im lokalen
@@ -107,7 +117,8 @@ Die Vorbereitung erzeugt eine Offline-Seite, einen echten sandboxierten
 Bridge-Host und eine unabhängige PyHTML-Datei mit mehreren Einbindungen.
 Die Browserprüfung sperrt Netzwerkzugriffe und prüft Auswahl, alle Regler,
 Link-Vorauswahl, Zustandswiederherstellung und Migration, Vergleichsgraph mit
-gemeinsamem Vorfaktor, Typografie, Sonderfälle,
+gemeinsamem Vorfaktor, Mausradzoom mit festem Bezugspunkt, Ausschnittspeicherung,
+Rücksetzen, Seitenscrollen ausserhalb des Diagramms, Typografie, Sonderfälle,
 Tastaturbedienung, schmale Ansichten und sichtbare Infrastrukturfehler.
 `--only standalone|host|pyhtml|failures` erlaubt gezielte Wiederholungen.
 

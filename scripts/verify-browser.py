@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import math
 from pathlib import Path
 
 from playwright.sync_api import Frame, Page, expect, sync_playwright
@@ -89,6 +90,110 @@ def comparison(surface: Page | Frame) -> None:
     expect(surface.locator('#comparison-curve')).to_have_count(0)
 
 
+def saved_state(surface: Page | Frame) -> dict:
+    """Read the production state owner after an application interaction.
+
+    Args:
+        surface: Ready application page or sandbox frame.
+    """
+    return surface.evaluate('() => window.MuWeaveModuleBridge ? MuWeaveModuleBridge.getState() : JSON.parse(localStorage.getItem("function-graphs-state-v1"))')
+
+
+def move_pointer(page: Page, surface: Page | Frame, x: float, y: float) -> None:
+    """Map frame-local CSS coordinates through a host's document zoom.
+
+    Args:
+        page: Top-level page owning the mouse.
+        surface: Application viewport containing the target point.
+        x: Horizontal client coordinate in that viewport.
+        y: Vertical client coordinate in that viewport.
+    """
+    if isinstance(surface, Frame):
+        box = surface.frame_element().bounding_box()
+        assert box is not None
+        viewport = surface.evaluate('({width: innerWidth, height: innerHeight})')
+        x = box['x'] + x * box['width'] / viewport['width']
+        y = box['y'] + y * box['height'] / viewport['height']
+    page.mouse.move(x, y)
+
+
+def wheel_zoom(page: Page, surface: Page | Frame) -> dict:
+    """Keep a curve point fixed under real wheel input, including scaled frames.
+
+    Args:
+        page: Top-level page owning the actual mouse.
+        surface: Application page or sandbox frame receiving wheel input.
+    """
+    surface.locator('#reset-view').press('Enter')
+    surface.locator('#plot').scroll_into_view_if_needed()
+    initial = saved_state(surface)
+    point = surface.evaluate('''state => {
+        const plot = document.querySelector('#plot'), rect = plot.getBoundingClientRect();
+        const width = plot.clientWidth, height = plot.clientHeight;
+        const scale = (height - 2 * Math.min(45, width * 0.12)) / state.span;
+        const anchor = state.type === 'power' ? {x: 1, y: state.parameters.power.a} :
+          {x: 0, y: FunctionGraphsCore.evaluate(state.type, state.parameters[state.type], 0)};
+        const clientX = rect.left + (width / 2 + anchor.x * scale) * rect.width / width;
+        const clientY = rect.top + (height / 2 - anchor.y * scale) * rect.height / height;
+        plot.addEventListener('wheel', event => {
+            window.lastTestWheel = {clientX: event.clientX, clientY: event.clientY};
+        }, {once: true});
+        return {clientX, clientY};
+    }''', initial)
+    move_pointer(page, surface, point['clientX'], point['clientY'])
+    before_scroll = (page.evaluate('scrollY'), surface.evaluate('scrollY'))
+    for _ in range(20):
+        before = saved_state(surface)['span']
+        if before < 0.5:
+            break
+        page.mouse.wheel(0, -240)
+        surface.wait_for_function('before => (window.MuWeaveModuleBridge ? MuWeaveModuleBridge.getState() : JSON.parse(localStorage.getItem("function-graphs-state-v1")))?.span < before', arg=before)
+    zoomed = saved_state(surface)
+    assert zoomed['span'] < 0.5, zoomed
+    assert zoomed['parameters'] == initial['parameters']
+    assert zoomed['comparison'] == initial['comparison']
+    assert (page.evaluate('scrollY'), surface.evaluate('scrollY')) == before_scroll
+    error = surface.evaluate('''({initial, zoomed}) => {
+        const plot = document.querySelector('#plot'), rect = plot.getBoundingClientRect();
+        const width = plot.clientWidth, height = plot.clientHeight;
+        const px = (lastTestWheel.clientX - rect.left) * width / rect.width;
+        const py = (lastTestWheel.clientY - rect.top) * height / rect.height;
+        const scale = (height - 2 * Math.min(45, width * 0.12)) / initial.span;
+        const anchor = {x: initial.center.x + (px - width / 2) / scale,
+                        y: initial.center.y - (py - height / 2) / scale};
+        const nextScale = (height - 2 * Math.min(45, width * 0.12)) / zoomed.span;
+        return {x: width / 2 + (anchor.x - zoomed.center.x) * nextScale - px,
+                y: height / 2 - (anchor.y - zoomed.center.y) * nextScale - py};
+    }''', {'initial': initial, 'zoomed': zoomed})
+    assert abs(error['x']) < 0.01 and abs(error['y']) < 0.01, error
+    assert not surface.locator('#function-curve').get_attribute('d').count('NaN')
+    page.mouse.wheel(0, 120)
+    surface.wait_for_function('span => (window.MuWeaveModuleBridge ? MuWeaveModuleBridge.getState() : JSON.parse(localStorage.getItem("function-graphs-state-v1")))?.span > span', arg=zoomed['span'])
+    for mode, delta in [(0, -16), (1, -1), (2, -0.05)]:
+        before = saved_state(surface)
+        consumed = surface.locator('#plot').evaluate('''(plot, args) => {
+            const rect = plot.getBoundingClientRect();
+            return !plot.dispatchEvent(new WheelEvent('wheel', {bubbles: true, cancelable: true,
+                deltaMode: args.mode, deltaY: args.delta, clientX: rect.left + rect.width / 2,
+                clientY: rect.top + rect.height / 2}));
+        }''', {'mode': mode, 'delta': delta})
+        assert consumed
+        pixels = delta * (16 if mode == 1 else surface.locator('#plot').evaluate('el=>el.clientHeight') if mode == 2 else 1)
+        assert math.isclose(saved_state(surface)['span'], before['span'] * math.exp(pixels * 0.002))
+    for event in [{'ctrlKey': True, 'deltaY': -120}, {'metaKey': True, 'deltaY': -120}, {'deltaX': 120, 'deltaY': 0}]:
+        before = saved_state(surface)
+        consumed = surface.locator('#plot').evaluate('(plot, data) => !plot.dispatchEvent(new WheelEvent("wheel", {bubbles:true,cancelable:true,...data}))', event)
+        assert not consumed
+        assert saved_state(surface) == before
+    surface.locator('#reset-view').press('Enter')
+    assert saved_state(surface)['span'] == 10
+    assert saved_state(surface)['center'] == {'x': 0, 'y': 0}
+    move_pointer(page, surface, point['clientX'], point['clientY'])
+    page.mouse.wheel(0, -240)
+    surface.wait_for_function('() => (window.MuWeaveModuleBridge ? MuWeaveModuleBridge.getState() : JSON.parse(localStorage.getItem("function-graphs-state-v1")))?.span < 10')
+    return saved_state(surface)
+
+
 def main() -> None:
     """Run deterministic browser interactions with all network requests blocked."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -122,8 +227,11 @@ def main() -> None:
             page.locator('#comparison-toggle').focus()
             page.keyboard.press('Space')
             expect(page.locator('#comparison-curve')).to_have_count(1)
+            zoomed = wheel_zoom(page, page)
             page.screenshot(path=str(directory / 'desktop-power.png'), full_page=True)
             page.reload(); ready(page)
+            assert saved_state(page)['center'] == zoomed['center']
+            assert saved_state(page)['span'] == zoomed['span']
             expect(page.locator('#comparison-toggle')).to_be_checked()
             expect(page.locator('#comparison-formula')).to_have_attribute('data-tex', 'g(x)=-2x^{2}')
             page.locator('[value="linear"]').check()
@@ -143,10 +251,14 @@ def main() -> None:
             expect(page.locator('#slider-n')).to_have_value('3')
             page.locator('#reset-parameters').click()
             expect(page.locator('#slider-a')).to_have_value('1')
-            for _ in range(4):
-                page.locator('#zoom-in').click()
+            for _ in range(20):
+                if page.locator('#zoom-in').is_disabled():
+                    break
+                page.locator('#zoom-in').press('Enter')
+                page.wait_for_timeout(30)
             expect(page.locator('#zoom-in')).to_be_disabled()
             page.locator('#reset-view').click()
+            assert saved_state(page)['center'] == {'x': 0, 'y': 0}
             page.reload(); ready(page)
             expect(page.locator('[value="power"]')).to_be_checked()
             page.goto(path + '?type=linear'); ready(page)
@@ -162,16 +274,24 @@ def main() -> None:
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), 'Mobile horizontal overflow'
             page.screenshot(path=str(directory / 'mobile-power.png'), full_page=True)
             page.set_viewport_size({'width': 1500, 'height': 1100})
+            page.set_viewport_size({'width': 1500, 'height': 600})
+            page.evaluate('scrollTo(0,0)')
+            page.locator('.page-header').hover()
+            page.mouse.wheel(0, 400)
+            page.wait_for_function('scrollY > 0')
+            page.set_viewport_size({'width': 1500, 'height': 1100})
             legacy = page.evaluate('FunctionGraphsCore.createState()')
             legacy['schema'] = 1
             del legacy['comparison']
             del legacy['parameters']['power']['m']
+            del legacy['center']
             legacy['parameters']['power']['n'] = 7
             page.evaluate('state=>localStorage.setItem("function-graphs-state-v1",JSON.stringify(state))', legacy)
             page.reload(); ready(page)
             expect(page.locator('#slider-n')).to_have_value('7')
             expect(page.locator('#comparison-toggle')).not_to_be_checked()
-            reports.append('standalone: presets, controls, comparison/shared coefficient, zero/equal degrees, keyboard, state migration, zoom, mobile')
+            assert page.evaluate('FunctionGraphsCore.validateState(JSON.parse(localStorage.getItem("function-graphs-state-v1"))).schema') == 3
+            reports.append('standalone: presets, controls, comparison, pointer-anchored wheel, wheel modes/modifiers, reset and viewport restore, outside scrolling, state migration, mobile')
         if args.only in (None, 'host'):
             page.goto((directory / 'host.html').as_uri())
             frame = app_frame(page)
@@ -179,10 +299,13 @@ def main() -> None:
             frame.locator('#comparison-toggle').check()
             slider(frame, 'n', 11)
             slider(frame, 'a', -0.5)
+            zoomed = wheel_zoom(page, frame)
             page.wait_for_function('() => fixture.state?.parameters.power.n===11 && fixture.state.parameters.power.a===-0.5')
             saved = page.evaluate('fixture.state')
             page.evaluate('state=>fixture.mount({state,activity:"power",presentation:"full",typography:{fontSizePt:13,lineHeight:1.6,scaleFactor:1.3}})', saved)
             frame = app_frame(page)
+            assert saved_state(frame)['center'] == zoomed['center']
+            assert saved_state(frame)['span'] == zoomed['span']
             expect(frame.locator('#slider-n')).to_have_value('11')
             expect(frame.locator('#formula')).to_have_attribute('data-tex', 'f(x)=-0.5x^{11}')
             expect(frame.locator('#comparison-toggle')).to_be_checked()
@@ -206,15 +329,19 @@ def main() -> None:
             legacy['schema'] = 1
             del legacy['comparison']
             del legacy['parameters']['power']['m']
+            del legacy['center']
             page.evaluate('state=>fixture.mount({state,migrate:true})', legacy)
             frame = app_frame(page)
             expect(frame.locator('#slider-n')).to_have_value('11')
             expect(frame.locator('#comparison-toggle')).not_to_be_checked()
-            assert page.evaluate('fixture.state.schema') == 2
+            assert page.evaluate('fixture.state.schema') == 3
             assert page.evaluate('fixture.messages.some(message=>message.kind==="migration-result" && message.payload.ok)')
             page.evaluate('fixture.send("host-disabled",{reason:"verification"})')
             expect(frame.locator('#slider-a')).to_be_disabled()
             expect(frame.locator('#notice')).to_contain_text('gesperrt')
+            before = saved_state(frame)
+            frame.locator('#plot').dispatch_event('wheel', {'deltaY': -100})
+            assert saved_state(frame) == before
             page.evaluate('fixture.mount({state:{schema:99}})')
             page.wait_for_timeout(500)
             frame = next(frame for frame in page.frames[1:] if frame.locator('#app').count())
@@ -226,6 +353,7 @@ def main() -> None:
             frame = app_frame(page)
             expect(frame.locator('[value="power"]')).to_be_checked()
             comparison(frame)
+            wheel_zoom(page, frame)
             slider(frame, 'a', 1)
             slider(frame, 'n', 6)
             expect(frame.locator('#formula')).to_have_attribute('data-tex', 'f(x)=x^{6}')
@@ -253,12 +381,13 @@ def main() -> None:
             expect(child.locator('#slider-c')).to_have_value('3')
             if popup.evaluate('document.documentElement.scrollHeight > innerHeight + 20'):
                 popup.evaluate('scrollTo(0,0)')
-                child.locator('#plot').hover()
+                heading = child.locator('#graph-heading').evaluate('el => {const r=el.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};}')
+                move_pointer(popup, child, heading['x'], heading['y'])
                 popup.mouse.wheel(0, 400)
                 popup.wait_for_function('() => scrollY > 0')
             popup.screenshot(path=str(directory / 'linked-applet.png'), full_page=True)
             popup.close()
-            reports.append('pyhtml: offline iframe and launch link, selected family, fullscreen preserves controls, wheel scroll, one shared runtime')
+            reports.append('pyhtml: offline iframe, pointer-anchored wheel in scaled frame, launch link, selected family, fullscreen, wheel outside plot, one shared runtime')
         if args.only in (None, 'failures'):
             for filename, message in [('no-runtime.html', 'Formeldarstellung'), ('mixed-version.html', 'verschiedenen Versionen')]:
                 page.goto((directory / filename).as_uri())

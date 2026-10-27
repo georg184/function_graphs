@@ -104,11 +104,82 @@ test('schema one migrates without changing saved controls or accepting malformed
   assert.deepEqual(migrated.parameters.linear, old.parameters.linear);
   assert.deepEqual(migrated.parameters.quadratic, old.parameters.quadratic);
   assert.equal(migrated.span, 4);
-  assert.deepEqual(core.validateState(old), migrated);
+  assert.deepEqual(core.validateState(old), core.migrateState(migrated));
   assert.deepEqual(old, original);
-  assert.throws(() => core.migrateState(migrated));
+  assert.throws(() => core.migrateState(core.validateState(old)));
   delete old.parameters.power.n;
   assert.throws(() => core.migrateState(old));
+});
+
+test('schema two migrates its centered view and comparison without mutating old work', () => {
+  const old = {schema: 2, type: 'power', comparison: true, span: 4,
+    parameters: {linear: {m: -1.5, q: 3}, quadratic: {a: 2, b: -3, c: 1}, power: {a: -0.5, n: 11, m: 4}}};
+  const original = structuredClone(old);
+  const current = core.migrateState(old);
+  assert.equal(current.schema, 3);
+  assert.deepEqual(current.center, {x: 0, y: 0});
+  assert.deepEqual(current.parameters, old.parameters);
+  assert.equal(current.comparison, true);
+  assert.equal(current.span, 4);
+  assert.deepEqual(core.validateState(old), current);
+  assert.deepEqual(old, original);
+  for (const span of [0.5, 81, '10', NaN]) assert.throws(() => core.migrateState({...old, span}));
+  assert.throws(() => core.migrateState({...old, comparison: 'true'}));
+});
+
+test('saved off-center detail views round-trip and reject nonfinite or excessive geometry', () => {
+  const state = core.createState();
+  state.span = 0.05;
+  state.center = {x: 1.02, y: -0.73};
+  const restored = core.validateState(JSON.parse(JSON.stringify(state)));
+  assert.deepEqual(restored, state);
+  restored.center.x = 0;
+  assert.equal(state.center.x, 1.02);
+  for (const center of [null, {}, {x: NaN, y: 0}, {x: 0, y: Infinity}, {x: '1', y: 0}, {x: 10001, y: 0}]) {
+    assert.throws(() => core.validateState({...state, center}));
+  }
+  for (const span of [0, 0.049, 81, Infinity]) assert.throws(() => core.validateState({...state, span}));
+});
+
+test('zoom preserves the pointed intersection at every scale, including clamped endpoints', () => {
+  const state = core.createState();
+  const anchor = {x: 1, y: -2};
+  const original = structuredClone(state);
+  const shape = {width: 900, height: 600, padding: 45};
+  const before = core.plotGeometry({...shape, ...state});
+  for (const factor of [0.001, 0.5, 1, 2, 100]) {
+    const zoomed = core.zoomViewport(state, factor, anchor);
+    assert.ok(zoomed.span >= core.VIEW_LIMITS.minSpan && zoomed.span <= core.VIEW_LIMITS.maxSpan);
+    const after = core.plotGeometry({...shape, ...zoomed});
+    assert.ok(Math.abs(before.x(anchor.x) - after.x(anchor.x)) < 1e-8);
+    assert.ok(Math.abs(before.y(anchor.y) - after.y(anchor.y)) < 1e-8);
+    assert.ok(Math.abs((after.x(2) - after.x(1)) - (after.y(1) - after.y(2))) < 1e-8);
+    const roundtrip = after.point(after.x(1), after.y(-2));
+    assert.ok(Math.abs(roundtrip.x - 1) < 1e-10 && Math.abs(roundtrip.y + 2) < 1e-10);
+    core.validateState({...state, ...zoomed});
+  }
+  const detail = {...state, ...core.zoomViewport(state, 0.5, anchor)};
+  const restored = core.zoomViewport(detail, 2, anchor);
+  assert.equal(restored.span, state.span);
+  assert.deepEqual(restored.center, state.center);
+  assert.deepEqual(core.zoomViewport(detail, 0.5).center, detail.center);
+  assert.deepEqual(state, original);
+  const atLimit = {...state, span: core.VIEW_LIMITS.minSpan, center: {x: 0.123, y: -0.456}};
+  assert.deepEqual(core.zoomViewport(atLimit, 0.5, anchor), {span: atLimit.span, center: atLimit.center});
+  for (const factor of [0, -1, Infinity, NaN]) assert.throws(() => core.zoomViewport(state, factor));
+});
+
+test('both shifted curves retain their common intersection and finite geometry in detail views', () => {
+  for (const center of [{x: 1, y: -2}, {x: -1, y: 0.5}, {x: 0, y: 0}]) {
+    const parameters = {a: center.y || 1, n: 4};
+    const viewport = {width: 900, height: 600, span: 0.05, padding: 45, center};
+    for (const n of [2, 4, 12]) {
+      const curve = core.graphPath('power', {...parameters, n}, viewport);
+      assert.ok(!/NaN|Infinity/.test(curve));
+      assert.ok(curve.startsWith('M45.000,'));
+      assert.ok(curve.includes('L450.000,300.000'));
+    }
+  }
 });
 
 test('control normalization keeps natural degrees and finite bounded decimal coefficients', () => {

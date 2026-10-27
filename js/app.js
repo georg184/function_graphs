@@ -1,7 +1,7 @@
 /* Accessible explorer UI, SVG graph and MuWeb learner-state integration. */
 (function () {
   'use strict';
-  const APP_VERSION = '20261026.183552';
+  const APP_VERSION = '20261027.064032';
   const PUBLIC_URL = 'https://georg184.github.io/items/440/';
   const core = window.FunctionGraphsCore;
   const bridge = window.MuWeaveModuleBridge || null;
@@ -127,26 +127,27 @@
     const width = plot.clientWidth, height = plot.clientHeight;
     if (width <= 0 || height <= 0) return;
     const padding = Math.min(45, width * 0.12);
-    const scale = (height - 2 * padding) / state.span;
-    const xLimit = (width / 2 - padding) / scale, yLimit = state.span / 2;
+    const viewport = {width, height, padding, span: state.span, center: state.center};
+    const {xmin, xmax, ymin, ymax, x, y} = core.plotGeometry(viewport);
+    const xAxisVisible = ymin <= 0 && ymax >= 0, yAxisVisible = xmin <= 0 && xmax >= 0;
+    const tickY = xAxisVisible ? Math.min(height - padding + 23, y(0) + 23) : height - padding + 23;
+    const tickX = yAxisVisible ? Math.max(padding - 9, x(0) - 9) : padding - 9;
     const step = core.gridStep(state.span, Math.max(4, (height - 2 * padding) / 55));
-    const x = value => width / 2 + value * scale;
-    const y = value => height / 2 - value * scale;
     const lines = [], labels = [];
     const line = (x1, y1, x2, y2, stroke, thickness = 1) => `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${stroke}" stroke-width="${thickness}"/>`;
-    for (let i = Math.ceil(-xLimit / (step / 2)); i <= Math.floor(xLimit / (step / 2)); i++) {
+    for (let i = Math.ceil(xmin / (step / 2)); i <= Math.floor(xmax / (step / 2)); i++) {
       const value = i * step / 2;
       if (i) lines.push(line(x(value), padding, x(value), height - padding, i % 2 ? '#eff3f6' : '#dce6eb'));
-      if (i && i % 2 === 0) labels.push(`<text x="${x(value)}" y="${y(0) + 23}" text-anchor="middle">${core.number(value)}</text>`);
+      if (i && i % 2 === 0) labels.push(`<text x="${x(value)}" y="${tickY}" text-anchor="middle">${core.number(value)}</text>`);
     }
-    for (let i = Math.ceil(-yLimit / (step / 2)); i <= Math.floor(yLimit / (step / 2)); i++) {
+    for (let i = Math.ceil(ymin / (step / 2)); i <= Math.floor(ymax / (step / 2)); i++) {
       const value = i * step / 2;
       if (i) lines.push(line(padding, y(value), width - padding, y(value), i % 2 ? '#eff3f6' : '#dce6eb'));
-      if (i && i % 2 === 0) labels.push(`<text x="${x(0) - 9}" y="${y(value) + 5}" text-anchor="end">${core.number(value)}</text>`);
+      if (i && i % 2 === 0) labels.push(`<text x="${tickX}" y="${y(value) + 5}" text-anchor="end">${core.number(value)}</text>`);
     }
     const curves = core.curves(state);
     const graphs = curves.map(curve => {
-      const path = core.graphPath(curve.type, curve.parameters, {width, height, span: state.span, padding});
+      const path = core.graphPath(curve.type, curve.parameters, viewport);
       const comparison = curve.name === 'g';
       return `<path id="${comparison ? 'comparison-curve' : 'function-curve'}" d="${path}" fill="none" stroke="${comparison ? '#b65717' : '#0a7b80'}" ${comparison ? 'stroke-dasharray="8 5"' : ''} stroke-width="3" stroke-linecap="round" stroke-linejoin="round" clip-path="url(#graph-clip)"/>`;
     }).join('');
@@ -154,13 +155,13 @@
     plot.setAttribute('aria-label', curves.map(curve => core.formula(curve.type, curve.parameters, curve.name)).join('; '));
     plot.innerHTML = `<title>${titles[state.type]}</title><defs><clipPath id="graph-clip"><rect x="${padding}" y="${padding}" width="${width - 2 * padding}" height="${height - 2 * padding}"/></clipPath><marker id="axis-arrow" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6" fill="none" stroke="#516a7a" stroke-width="1.1"/></marker></defs>
       ${lines.join('')}
-      <path d="M${padding - 7} ${y(0)} H${width - padding + 9}" stroke="#516a7a" stroke-width="1.4" fill="none" marker-end="url(#axis-arrow)"/>
-      <path d="M${x(0)} ${height - padding + 7} V${padding - 9}" stroke="#516a7a" stroke-width="1.4" fill="none" marker-end="url(#axis-arrow)"/>
-      ${labels.join('')}<text x="${x(0) - 9}" y="${y(0) + 23}" text-anchor="end">0</text>
-      <text class="axis-label" x="${width - padding + 13}" y="${y(0) - 9}">x</text><text class="axis-label" x="${x(0) + 12}" y="${padding - 10}">y</text>
+      ${xAxisVisible ? `<path d="M${padding - 7} ${y(0)} H${width - padding + 9}" stroke="#516a7a" stroke-width="1.4" fill="none" marker-end="url(#axis-arrow)"/>` : ''}
+      ${yAxisVisible ? `<path d="M${x(0)} ${height - padding + 7} V${padding - 9}" stroke="#516a7a" stroke-width="1.4" fill="none" marker-end="url(#axis-arrow)"/>` : ''}
+      ${labels.join('')}${xAxisVisible && yAxisVisible ? `<text x="${tickX}" y="${tickY}" text-anchor="end">0</text>` : ''}
+      <text class="axis-label" x="${width - padding + 13}" y="${xAxisVisible ? Math.max(padding + 12, y(0) - 9) : height - padding - 9}">x</text><text class="axis-label" x="${yAxisVisible ? Math.min(width - padding - 12, x(0) + 12) : padding + 12}" y="${padding - 10}">y</text>
       ${graphs}`;
-    document.getElementById('zoom-in').disabled = locked || state.span <= 2;
-    document.getElementById('zoom-out').disabled = locked || state.span >= 80;
+    document.getElementById('zoom-in').disabled = locked || state.span <= core.VIEW_LIMITS.minSpan;
+    document.getElementById('zoom-out').disabled = locked || state.span >= core.VIEW_LIMITS.maxSpan;
   }
 
   /** Coalesce geometry updates at browser-frame boundaries. */
@@ -247,15 +248,32 @@
   // Number inputs must leave wheel input to the surrounding page.
   root.addEventListener('wheel', event => { if (event.target.type === 'number') event.target.blur(); }, {passive: true});
 
+  // Only the diagram consumes wheel input; browser zoom and other page areas keep their defaults.
+  plot.addEventListener('wheel', event => {
+    if (!ready || locked || event.ctrlKey || event.metaKey || !Number.isFinite(event.deltaY) || event.deltaY === 0) return;
+    const rect = plot.getBoundingClientRect();
+    const width = plot.clientWidth, height = plot.clientHeight;
+    if (!rect.width || !rect.height || !width || !height) return;
+    const padding = Math.min(45, width * 0.12);
+    const geometry = core.plotGeometry({width, height, padding, span: state.span, center: state.center});
+    const px = Math.max(padding, Math.min(width - padding, (event.clientX - rect.left) * width / rect.width));
+    const py = Math.max(padding, Math.min(height - padding, (event.clientY - rect.top) * height / rect.height));
+    const delta = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? height : 1);
+    const factor = Math.exp(Math.max(-240, Math.min(240, delta)) * 0.002);
+    event.preventDefault();
+    Object.assign(state, core.zoomViewport(state, factor, geometry.point(px, py)));
+    requestDraw(); publish();
+  }, {passive: false});
+
   document.getElementById('reset-parameters').addEventListener('click', () => {
     if (!ready || locked) return;
     state.parameters[state.type] = core.createState(state.type).parameters[state.type];
     updateParameters(); publish();
   });
-  for (const [id, transform] of [['zoom-in', value => Math.max(2, value / 1.5)], ['zoom-out', value => Math.min(80, value * 1.5)], ['reset-view', () => 10]]) {
+  for (const [id, factor] of [['zoom-in', 1 / 1.5], ['zoom-out', 1.5], ['reset-view', null]]) {
     document.getElementById(id).addEventListener('click', () => {
       if (!ready || locked) return;
-      state.span = transform(state.span);
+      Object.assign(state, factor === null ? {span: 10, center: {x: 0, y: 0}} : core.zoomViewport(state, factor));
       requestDraw(); publish();
     });
   }
@@ -299,6 +317,7 @@
 
   if (bridge) {
     bridge.registerStateMigration(1, core.migrateState);
+    bridge.registerStateMigration(2, core.migrateState);
     bridge.setSnapshotProvider(snapshot);
     bridge.subscribeState(initialize);
     if (bridge.isInitialized()) initialize(bridge.getState());

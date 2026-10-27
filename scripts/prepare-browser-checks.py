@@ -58,15 +58,19 @@ function initialize() {
       activity:options.activity??'power',presentation:options.presentation??'compact',launchParameters:options.launchParameters??{}}
   });
 }
+function migrate() {
+  fixture.send('migrate-state',{requestId:saved.schema,fromVersion:saved.schema,toVersion:saved.schema+1,state:saved});
+}
 addEventListener('message', event => {
   if(event.source!==frame.contentWindow || event.data?.channel!=='test-channel') return;
   const message=event.data; fixture.messages.push(message);
   if(message.kind==='ready') {
-    if(options.migrate) fixture.send('migrate-state',{requestId:1,fromVersion:1,toVersion:2,state:saved});
+    if(options.migrate) migrate();
     else initialize();
   }
   if(message.kind==='migration-result' && message.payload.ok) {
-    saved=message.payload.state; initialize();
+    saved=message.payload.state;
+    if(saved.schema<fixtureData.stateVersion) migrate(); else initialize();
   }
   if(message.kind==='state-changed'||message.kind==='snapshot') saved=message.payload.state;
 });

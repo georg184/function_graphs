@@ -1,7 +1,8 @@
 /* Pure function models, bounded parameter state and plot geometry. */
 (function (global) {
   'use strict';
-  const VERSION = '20261026.183552';
+  const VERSION = '20261027.064032';
+  const VIEW_LIMITS = Object.freeze({minSpan: 0.05, maxSpan: 80, maxCenter: 10000});
   const TYPES = Object.freeze(['linear', 'quadratic', 'power']);
   const SETTINGS = Object.freeze({
     linear: Object.freeze({m: {min: -5, max: 5, step: 0.1, initial: 1}, q: {min: -10, max: 10, step: 0.1, initial: 0}}),
@@ -17,14 +18,15 @@
 
   /** Return an independent, complete state with the requested initial family. */
   function createState(type = 'power') {
-    return {schema: 2, comparison: false, type: TYPES.includes(type) ? type : 'power', parameters: Object.fromEntries(TYPES.map(kind => [kind,
-      Object.fromEntries(Object.entries(SETTINGS[kind]).map(([key, setting]) => [key, setting.initial]))])), span: 10};
+    return {schema: 3, comparison: false, type: TYPES.includes(type) ? type : 'power', parameters: Object.fromEntries(TYPES.map(kind => [kind,
+      Object.fromEntries(Object.entries(SETTINGS[kind]).map(([key, setting]) => [key, setting.initial]))])), span: 10, center: {x: 0, y: 0}};
   }
 
   /** Validate every saved family, including controls that are currently hidden. */
   function validateState(value) {
-    if (value?.schema === 1) return migrateState(value);
-    if (!value || value.schema !== 2 || typeof value.comparison !== 'boolean' || !TYPES.includes(value.type) || !value.parameters || !Number.isFinite(value.span) || value.span < 2 || value.span > 80) throw new TypeError('Invalid function graph state');
+    if (value?.schema === 1 || value?.schema === 2) return validateState(migrateState(value));
+    if (!value || value.schema !== 3 || typeof value.comparison !== 'boolean' || !TYPES.includes(value.type) || !value.parameters || !Number.isFinite(value.span) || value.span < VIEW_LIMITS.minSpan || value.span > VIEW_LIMITS.maxSpan) throw new TypeError('Invalid function graph state');
+    if (!value.center || !['x', 'y'].every(key => Number.isFinite(value.center[key]) && Math.abs(value.center[key]) <= VIEW_LIMITS.maxCenter)) throw new TypeError('Invalid graph viewport center');
     const state = createState(value.type);
     for (const type of TYPES) {
       for (const [key, setting] of Object.entries(SETTINGS[type])) {
@@ -34,15 +36,52 @@
       }
     }
     state.span = value.span;
+    state.center = {x: value.center.x, y: value.center.y};
     state.comparison = value.comparison;
     return state;
   }
 
-  /** Upgrade schema one without changing its family, parameters or viewport. */
+  /** Validate and upgrade exactly one legacy schema, retaining its original view. */
   function migrateState(value) {
-    if (value?.schema !== 1) throw new TypeError('Expected function graph state schema one');
-    return validateState({...value, schema: 2, comparison: false,
-      parameters: {...value.parameters, power: {...value.parameters?.power, m: SETTINGS.power.m.initial}}});
+    if (![1, 2].includes(value?.schema) || !Number.isFinite(value.span) || value.span < 2 || value.span > 80) throw new TypeError('Invalid legacy function graph state');
+    const legacy = value.schema === 1 ? {...value, comparison: false,
+      parameters: {...value.parameters, power: {...value.parameters?.power, m: SETTINGS.power.m.initial}}} : value;
+    const current = validateState({...legacy, schema: 3, center: {x: 0, y: 0}});
+    if (value.schema === 2) return current;
+    const {center, ...intermediate} = current;
+    return {...intermediate, schema: 2};
+  }
+
+  /** Project a viewport with the same scale on both coordinate axes.
+   * Args:
+   *   viewport: CSS dimensions, plot padding, vertical span and graph center.
+   */
+  function plotGeometry({width, height, span, padding, center = {x: 0, y: 0}}) {
+    const scale = (height - 2 * padding) / span;
+    const halfWidth = (width / 2 - padding) / scale;
+    return {
+      scale, xmin: center.x - halfWidth, xmax: center.x + halfWidth,
+      ymin: center.y - span / 2, ymax: center.y + span / 2,
+      x: value => width / 2 + (value - center.x) * scale,
+      y: value => height / 2 - (value - center.y) * scale,
+      point: (px, py) => ({x: center.x + (px - width / 2) / scale, y: center.y - (py - height / 2) / scale})
+    };
+  }
+
+  /** Change scale around an invariant graph point, including at zoom limits.
+   * Args:
+   *   state: Valid current state, including span and center.
+   *   factor: Positive multiplier; smaller values magnify the graph.
+   *   anchor: Graph point to retain under the pointer, defaulting to the center.
+   */
+  function zoomViewport(state, factor, anchor = state.center) {
+    if (!Number.isFinite(factor) || factor <= 0 || !Number.isFinite(anchor?.x) || !Number.isFinite(anchor?.y)) throw new TypeError('Invalid graph zoom');
+    const span = Math.max(VIEW_LIMITS.minSpan, Math.min(VIEW_LIMITS.maxSpan, state.span * factor));
+    if (span === state.span) return {span, center: {...state.center}};
+    const ratio = span / state.span;
+    const center = Object.fromEntries(['x', 'y'].map(key => [key,
+      Math.max(-VIEW_LIMITS.maxCenter, Math.min(VIEW_LIMITS.maxCenter, anchor[key] + (state.center[key] - anchor[key]) * ratio))]));
+    return {span, center};
   }
 
   /** Derive displayed curves from one shared coefficient and independent degrees. */
@@ -96,16 +135,15 @@
 
   /** Sample a continuous graph densely, keeping off-screen SVG coordinates finite. */
   function graphPath(type, parameters, viewport) {
-    const {width, height, span, padding} = viewport;
-    const scale = (height - 2 * padding) / span;
-    const limit = (width / 2 - padding) / scale;
+    const {width} = viewport;
+    const geometry = plotGeometry(viewport);
     const samples = Math.min(2400, Math.max(240, Math.ceil(width) * 2));
     const commands = [];
     for (let i = 0; i <= samples; i++) {
-      const x = -limit + 2 * limit * i / samples;
+      const x = geometry.xmin + (geometry.xmax - geometry.xmin) * i / samples;
       const y = evaluate(type, parameters, x);
-      const px = width / 2 + x * scale;
-      const py = Math.max(-1e6, Math.min(1e6, height / 2 - y * scale));
+      const px = geometry.x(x);
+      const py = Math.max(-1e6, Math.min(1e6, geometry.y(y)));
       // These decimals are geometry serialization, never displayed quantities.
       commands.push(`${i ? 'L' : 'M'}${px.toFixed(3)},${py.toFixed(3)}`);
     }
@@ -120,7 +158,7 @@
     return url.href;
   }
 
-  const api = Object.freeze({VERSION, TYPES, SETTINGS, number, createState, validateState, migrateState, curves, parameter, evaluate, formula, gridStep, graphPath, familyUrl});
+  const api = Object.freeze({VERSION, VIEW_LIMITS, TYPES, SETTINGS, number, createState, validateState, migrateState, plotGeometry, zoomViewport, curves, parameter, evaluate, formula, gridStep, graphPath, familyUrl});
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else global.FunctionGraphsCore = api;
 })(typeof window === 'undefined' ? globalThis : window);
